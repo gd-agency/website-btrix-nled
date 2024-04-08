@@ -19,7 +19,7 @@ jobs:
 
       - name: Determine Deployment Method
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} "if [ ! -d '${{ secrets.DEPLOY_PATH }}' ]; then echo 'DIR_NOT_EXIST'; else echo 'DIR_EXIST'; fi" > deployment_method.txt
+          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} "if [ ! -d '${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}' ]; then echo 'DIR_NOT_EXIST'; else echo 'DIR_EXIST'; fi" > deployment_method.txt
 
       - name: Copy Project to Server (Full Copy)
         if: contains(steps.determine-deployment-method.outputs.result, 'DIR_NOT_EXIST')
@@ -27,8 +27,8 @@ jobs:
           tar -czf project.tar.gz .
           scp -o StrictHostKeyChecking=no project.tar.gz ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:/tmp
           ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} << EOF
-            mkdir -p ${{ secrets.DEPLOY_PATH }}
-            tar -xzf /tmp/project.tar.gz -C ${{ secrets.DEPLOY_PATH }}
+            mkdir -p ${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}
+            tar -xzf /tmp/project.tar.gz -C ${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}
             rm /tmp/project.tar.gz
           EOF
         shell: bash
@@ -36,7 +36,7 @@ jobs:
       - name: Sync Project to Server (rsync)
         if: contains(steps.determine-deployment-method.outputs.result, 'DIR_EXIST')
         run: |
-          rsync -avz --exclude='.git/' ${{ github.workspace }}/ ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:${{ secrets.DEPLOY_PATH }}
+          rsync -avz --exclude='.git/' ${{ github.workspace }}/ ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}
 
       - name: Restart Project
         run: |
