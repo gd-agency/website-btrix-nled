@@ -17,31 +17,20 @@ jobs:
         with:
           ssh-private-key: ${{ secrets.SSH_KEY_PRIVATE }}
 
-      - name: Determine Deployment Method
+      # Используйте SSH для проверки наличия директории и выберите метод деплоя непосредственно в команде SSH
+      - name: Deploy Project Using Condition
         run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} "if [ ! -d '${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}' ]; then echo 'DIR_NOT_EXIST'; else echo 'DIR_EXIST'; fi" > deployment_method.txt
-
-      - name: Copy Project to Server (Full Copy)
-        if: contains(steps.determine-deployment-method.outputs.result, 'DIR_NOT_EXIST')
-        run: |
-          tar -czf project.tar.gz .
-          scp -o StrictHostKeyChecking=no project.tar.gz ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:/tmp
-          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} << EOF
-            mkdir -p ${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}
-            tar -xzf /tmp/project.tar.gz -C ${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}
-            rm /tmp/project.tar.gz
-          EOF
-        shell: bash
-
-      - name: Sync Project to Server (rsync)
-        if: contains(steps.determine-deployment-method.outputs.result, 'DIR_EXIST')
-        run: |
-          rsync -avz --exclude='.git/' ${{ github.workspace }}/ ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}
-
-      - name: Restart Project
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} << EOF
-            cd ${{ secrets.DEFAULT_PATH }}/${{ secrets.PROJECT_PATH }}
+          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} '
+            if [ ! -d "${{ secrets.DEFAULT_PATH }}${{ secrets.PROJECT_PATH }}" ]; then
+              mkdir -p "${{ secrets.DEFAULT_PATH }}${{ secrets.PROJECT_PATH }}";
+              # Полное копирование, если директория не существовала
+              tar -czf - . | ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} "tar -xzf - -C ${{ secrets.DEFAULT_PATH }}${{ secrets.PROJECT_PATH }}"
+            else
+              # Использование rsync, если директория существует
+              rsync -avz --exclude='.git/' ./ ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:${{ secrets.DEFAULT_PATH }}${{ secrets.PROJECT_PATH }}
+            fi
+            # Перезапуск проекта
+            cd ${{ secrets.DEFAULT_PATH }}${{ secrets.PROJECT_PATH }}
             echo "MYSQL_HOST=${{ secrets.MYSQL_HOST }}" > .env
             echo "MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}" >> .env
             echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" >> .env
@@ -51,4 +40,4 @@ jobs:
             docker-compose down
             docker-compose build --no-cache
             docker-compose up -d
-          EOF
+          '
