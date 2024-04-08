@@ -5,7 +5,7 @@ services:
     image: nginx:alpine3.17
     container_name: nginx_container
     ports:
-      - "80:80"
+      - "${OUTPUT_PORT}:80"
     volumes:
       - ./nginx/website.conf:/etc/nginx/conf.d/default.conf
       - ./src:/var/www/html

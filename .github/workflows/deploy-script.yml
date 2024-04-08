@@ -1,10 +1,9 @@
-name: Deploy Project by Copying
+name: Deploy Project by Syncing
 
 on:
   push:
     branches:
-      - main # или ваша ветка для деплоя
-
+      - main
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -12,34 +11,35 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Archive Project
-        run: tar -czf project.tar.gz .
+      - name: Install rsync on runner
+        run: sudo apt-get update && sudo apt-get install -y rsync
 
-      - name: Copy Project to Server
-        uses: appleboy/scp-action@master
+      - name: Setup SSH
+        uses: webfactory/ssh-agent@v0.5.3
         with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          source: "project.tar.gz"
-          target: "/tmp"
+          ssh-private-key: ${{ secrets.SSH_PRIVATE_KEY }}
 
-      - name: Deploy Project
-        uses: appleboy/ssh-action@master
-        with:
-          host: ${{ secrets.VPS_HOST }}
-          username: ${{ secrets.USERNAME }}
-          key: ${{ secrets.SSH_PRIVATE_KEY }}
-          port: 22
-          script: |
-            cd ${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}
-            tar -xzf /tmp/project.tar.gz -C .
+      - name: Sync Project to Server and Deploy
+        run: |
+          # Установить rsync на сервере, если он не установлен
+          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} "which rsync || (sudo apt-get update && sudo apt-get install -y rsync)"
+          
+          # Проверить существование директории проекта и создать, если не существует
+          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} "mkdir -p ${{ secrets.DEFAULT_PATH }}/${{ secrets.PROJECT_PATH }}"
+          
+          # Синхронизировать проект с использованием rsync
+          rsync -avz --exclude='.git/' --exclude='*.tar.gz' ${{ github.workspace }}/ ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:${{ secrets.DEFAULT_PATH }}/${{ secrets.PROJECT_PATH }}
+          
+          # Выполнить команды для развертывания
+          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} << EOF
+            cd ${{ secrets.DEFAULT_PATH }}/${{ secrets.PROJECT_PATH }}
             export MYSQL_HOST=${{ secrets.MYSQL_HOST }}
             export MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
             export MYSQL_USER=${{ secrets.MYSQL_USER }}
             export MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
             export MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
+            export OUTPUT_PORT=${{ secrets.OUTPUT_PORT }}
             docker-compose down
             docker-compose build --no-cache
             docker-compose up -d
+          EOF
