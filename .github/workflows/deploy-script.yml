@@ -21,16 +21,16 @@ jobs:
       - name: Deploy Project Using Condition
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} '
-            if [ ! -d "${{ secrets.DEFAULT_PATH }}${{ secrets.PROJECT_PATH }}" ]; then
-              mkdir -p "${{ secrets.DEFAULT_PATH }}${{ secrets.PROJECT_PATH }}";
+            if [ ! -d "${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}" ]; then
+              mkdir -p "${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}";
               # Полное копирование, если директория не существовала
-              tar -czf - . | ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} "tar -xzf - -C ${{ secrets.DEFAULT_PATH }}${{ secrets.PROJECT_PATH }}"
+              tar -czf - . | ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} "tar -xzf - -C ${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}"
             else
               # Использование rsync, если директория существует
-              rsync -avz --exclude='.git/' ./ ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:${{ secrets.DEFAULT_PATH }}${{ secrets.PROJECT_PATH }}
+              rsync -avz --exclude='.git/' ./ ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}
             fi
             # Перезапуск проекта
-            cd ${{ secrets.DEFAULT_PATH }}${{ secrets.PROJECT_PATH }}
+            cd ${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}
             echo "MYSQL_HOST=${{ secrets.MYSQL_HOST }}" > .env
             echo "MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}" >> .env
             echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" >> .env
