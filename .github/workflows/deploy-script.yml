@@ -1,10 +1,8 @@
-name: Deploy Project Conditionally
-
+name: Deploy Project Conditionally with SCP and SSH
 on:
   push:
     branches:
       - main # Или ваша ветка для деплоя
-
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -12,32 +10,48 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Setup SSH
-        uses: webfactory/ssh-agent@v0.5.3
-        with:
-          ssh-private-key: ${{ secrets.SSH_KEY_PRIVATE }}
+      - name: Archive Project
+        run: tar -czf project.tar.gz .
 
-      # Используйте SSH для проверки наличия директории и выберите метод деплоя непосредственно в команде SSH
-      - name: Deploy Project Using Condition
-        run: |
-          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} '
+      - name: Copy Project Archive to Server
+        uses: appleboy/scp-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY_PRIVATE }}
+          port: 22
+          source: "project.tar.gz"
+          target: "/tmp"
+
+      - name: Deploy and Restart Project
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.VPS_HOST }}
+          username: ${{ secrets.USERNAME }}
+          key: ${{ secrets.SSH_KEY_PRIVATE }}
+          port: 22
+          script: |
+            # Проверяем, существует ли директория проекта и создаем ее, если необходимо
             if [ ! -d "${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}" ]; then
               mkdir -p "${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}";
-              # Полное копирование, если директория не существовала
-              tar -czf - . | ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} "tar -xzf - -C ${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}"
-            else
-              # Использование rsync, если директория существует
-              rsync -avz --exclude='.git/' ./ ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}
             fi
-            # Перезапуск проекта
+            # Распаковываем архив проекта
+            tar -xzf /tmp/project.tar.gz -C ${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}
+            # Удаляем архив проекта после распаковки
+            rm /tmp/project.tar.gz
+            
+            # Переходим в директорию проекта
             cd ${{ vars.DEFAULT_PATH }}${{ vars.PROJECT_PATH }}
+            
+            # Устанавливаем переменные окружения
             echo "MYSQL_HOST=${{ secrets.MYSQL_HOST }}" > .env
             echo "MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}" >> .env
             echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" >> .env
             echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> .env
             echo "MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}" >> .env
             echo "OUTPUT_PORT=${{ secrets.OUTPUT_PORT }}" >> .env
+            
+            # Запускаем Docker Compose
             docker-compose down
             docker-compose build --no-cache
             docker-compose up -d
-          '
