@@ -1,0 +1,10 @@
+<i title="MasterCard" class="mastercard"></i>
+<i title="Visa" class="visa"></i>
+<i title="Mir" class="mir"></i>
+<i title="Tinkoff" class="tinkoff"></i>
+<i title="WebMoney" class="webmoney"></i>
+<i title="Qiwi" class="qiwi"></i>
+<i title="Yookassa" class="yookassa"></i>
+<i title="Sberbank" class="sberbank"></i>
+<i title="Halva" class="halva"></i>
+<i title="Belcart" class="belcart"></i>
