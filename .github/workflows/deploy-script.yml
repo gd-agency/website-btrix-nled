@@ -1,9 +1,10 @@
-name: Deploy Project by Syncing
+name: Deploy Project Conditionally
 
 on:
   push:
     branches:
-      - main
+      - main # Или ваша ветка для деплоя
+
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -11,34 +12,36 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v2
 
-      - name: Install rsync on runner
-        run: sudo apt-get update && sudo apt-get install -y rsync
-
       - name: Setup SSH
         uses: webfactory/ssh-agent@v0.5.3
         with:
           ssh-private-key: ${{ secrets.SSH_KEY_PRIVATE }}
 
-      - name: Sync Project to Server and Deploy
+      - name: Determine Deployment Method
         run: |
-          # Установить rsync на сервере, если он не установлен
-          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} "which rsync || (sudo apt-get update && sudo apt-get install -y rsync)"
-          
-          # Проверить существование директории проекта и создать, если не существует
-          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} "mkdir -p ${{ secrets.DEFAULT_PATH }}/${{ secrets.PROJECT_PATH }}"
-          
-          # Синхронизировать проект с использованием rsync
-          rsync -avz --exclude='.git/' --exclude='*.tar.gz' ${{ github.workspace }}/ ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:${{ secrets.DEFAULT_PATH }}/${{ secrets.PROJECT_PATH }}
-          
-          # Выполнить команды для развертывания
+          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} "if [ ! -d '${{ secrets.DEPLOY_PATH }}' ]; then echo 'DIR_NOT_EXIST'; else echo 'DIR_EXIST'; fi" > deployment_method.txt
+
+      - name: Copy Project to Server (Full Copy)
+        if: contains(steps.determine-deployment-method.outputs.result, 'DIR_NOT_EXIST')
+        run: |
+          tar -czf project.tar.gz .
+          scp -o StrictHostKeyChecking=no project.tar.gz ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:/tmp
           ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} << EOF
-            cd ${{ secrets.DEFAULT_PATH }}/${{ secrets.PROJECT_PATH }}
-            export MYSQL_HOST=${{ secrets.MYSQL_HOST }}
-            export MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}
-            export MYSQL_USER=${{ secrets.MYSQL_USER }}
-            export MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}
-            export MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
-            export OUTPUT_PORT=${{ secrets.OUTPUT_PORT }}
+            mkdir -p ${{ secrets.DEPLOY_PATH }}
+            tar -xzf /tmp/project.tar.gz -C ${{ secrets.DEPLOY_PATH }}
+            rm /tmp/project.tar.gz
+          EOF
+        shell: bash
+
+      - name: Sync Project to Server (rsync)
+        if: contains(steps.determine-deployment-method.outputs.result, 'DIR_EXIST')
+        run: |
+          rsync -avz --exclude='.git/' ${{ github.workspace }}/ ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }}:${{ secrets.DEPLOY_PATH }}
+
+      - name: Restart Project
+        run: |
+          ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} << EOF
+            cd ${{ secrets.DEPLOY_PATH }}
             docker-compose down
             docker-compose build --no-cache
             docker-compose up -d
