@@ -9,10 +9,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@v2
-
       - name: Archive Project
-        run: tar -czf project.tar.gz . --exclude='./var/log' --exclude='./tmp'
-
+        run: tar -czf project.tar.gz --exclude='./var/log' --exclude='./tmp' .
       - name: Copy Project Archive to Server
         uses: appleboy/scp-action@master
         with:
