@@ -41,7 +41,13 @@ jobs:
       - name: Restart Project
         run: |
           ssh -o StrictHostKeyChecking=no ${{ secrets.USERNAME }}@${{ secrets.VPS_HOST }} << EOF
-            cd ${{ secrets.DEPLOY_PATH }}
+            cd ${{ secrets.DEFAULT_PATH }}/${{ secrets.PROJECT_PATH }}
+            echo "MYSQL_HOST=${{ secrets.MYSQL_HOST }}" > .env
+            echo "MYSQL_DATABASE=${{ secrets.MYSQL_DATABASE }}" >> .env
+            echo "MYSQL_USER=${{ secrets.MYSQL_USER }}" >> .env
+            echo "MYSQL_PASSWORD=${{ secrets.MYSQL_PASSWORD }}" >> .env
+            echo "MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}" >> .env
+            echo "OUTPUT_PORT=${{ secrets.OUTPUT_PORT }}" >> .env
             docker-compose down
             docker-compose build --no-cache
             docker-compose up -d
